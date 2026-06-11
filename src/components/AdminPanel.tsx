@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, doc, getDocs, where, getDoc, setDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, doc, getDocs, where, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Match, Prediction, User } from '../types';
 
@@ -172,6 +172,44 @@ export default function AdminPanel() {
     }
   };
 
+  const clearDatabase = async () => {
+    const code = window.prompt("هل أنت متأكد من مسح البيانات السابقة وحذف حسابات اللاعبين؟ اكتب 'تأكيد' للتأكيد.");
+    if (code !== 'تأكيد') {
+      showMsg("تم إلغاء مسح البيانات.", 'error');
+      return;
+    }
+    try {
+      showMsg("جاري تنظيف وحذف البيانات...", 'success');
+      
+      const matchesQuery = query(collection(db, 'matches'), where('status', '==', 'completed'));
+      const matchesSnap = await getDocs(matchesQuery);
+      
+      // Delete completed matches
+      for (const d of matchesSnap.docs) {
+        await deleteDoc(d.ref);
+      }
+      
+      // Delete all predictions (since accounts are being cleared)
+      const predsSnap = await getDocs(collection(db, 'predictions'));
+      for (const d of predsSnap.docs) {
+        await deleteDoc(d.ref);
+      }
+      
+      // Delete all non-admin user documents from Firestore
+      const usersSnap = await getDocs(collection(db, 'users'));
+      for (const d of usersSnap.docs) {
+        const u = d.data();
+        if (u.email !== 'mrahmedapp4@gmail.com' && u.email !== 'admin@user.familyfantasy.com') {
+          await deleteDoc(d.ref);
+        }
+      }
+      
+      showMsg("تم تنظيف المباريات السابقة وحذف جميع حسابات اللاعبين وتوقعاتهم بنجاح!");
+    } catch(err: any) {
+      showMsg("خطأ أثناء التنظيف: " + err.message, 'error');
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto flex flex-col space-y-8 pb-12 w-full relative">
       {statusMsg && (
@@ -263,6 +301,19 @@ export default function AdminPanel() {
             <MatchAdminItem key={m.id} match={m} onComplete={completeMatch} />
           ))}
         </div>
+      </div>
+
+      <div className="bg-red-50 p-4 sm:p-8 rounded-2xl border border-red-200 shadow-sm mt-8">
+        <h2 className="text-sm font-bold text-red-700 mb-4">منطقة خطرة (Danger Zone)</h2>
+        <p className="text-xs text-red-600 mb-6 font-bold leading-relaxed">
+          تنظيف قاعدة البيانات للمباريات وحسابات اللاعبين السابقة فقط. سيتم حذف جميع حسابات اللاعبين (ما عدا المشرفين)، وكل توقعاتهم، والمباريات المكتملة السابقة بشكل نهائي لتبدأ البطولة/الحدث الجديد بصفحة بيضاء. لن يتم حذف المباريات القادمة Pending.
+        </p>
+        <button 
+          onClick={clearDatabase} 
+          className="bg-red-600 text-white font-black px-6 py-3 rounded-xl hover:bg-red-700 transition-colors shadow-md text-sm w-full sm:w-auto"
+        >
+          تنظيف المباريات السابقة وحذف جميع حسابات اللاعبين
+        </button>
       </div>
     </div>
   );

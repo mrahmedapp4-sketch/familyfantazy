@@ -43,6 +43,12 @@ function App() {
   const [showAdminPrompt, setShowAdminPrompt] = useState(false);
   const [adminPass, setAdminPass] = useState('');
   const [adminLoading, setAdminLoading] = useState(false);
+  const [showPrizesBar, setShowPrizesBar] = useState(() => !localStorage.getItem('ff_prizes_seen'));
+
+  const dismissPrizes = () => {
+    localStorage.setItem('ff_prizes_seen', 'true');
+    setShowPrizesBar(false);
+  };
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -133,20 +139,31 @@ function App() {
                   لوحة التحكم
                 </Link>
               )}
-              <button 
-                onClick={() => signOut(auth)} 
-                className="text-xs font-black text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 py-2 px-4 rounded-xl transition-colors"
-                title="Sign Out"
-              >
-                خروج
-              </button>
+              <div className="flex items-center space-x-2 space-x-reverse">
+                <div 
+                  className="bg-amber-100 text-amber-900 border border-amber-200 font-black px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-sm"
+                  title="النقاط الإجمالية الحالية"
+                >
+                  <span>🏆</span>
+                  <span>{user?.totalPoints ?? 0} {user?.totalPoints === 1 ? 'نقطة' : 'نقاط'}</span>
+                </div>
+                <button 
+                  onClick={() => { if (window.confirm("هل تريد تسجيل الخروج؟")) signOut(auth); }} 
+                  className="p-2.5 text-slate-400 hover:text-red-500 bg-slate-50 hover:bg-red-50 rounded-xl transition-colors shrink-0"
+                  title="تسجيل الخروج"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
+                  </svg>
+                </button>
+              </div>
             </div>
           )}
         </header>
 
-        {auth.currentUser && (
-          <div className="bg-white border-b border-slate-100 px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-center shrink-0 text-xs gap-4 shadow-sm">
-            <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-4">
+        {auth.currentUser && showPrizesBar && (
+          <div className="bg-white border-b border-slate-100 px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between shrink-0 text-xs gap-4 shadow-sm relative">
+            <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-4 flex-1">
               <div className="flex items-center space-x-2 space-x-reverse bg-slate-50 px-3 sm:px-4 py-2 rounded-xl">
                 <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0"></span>
                 <span className="font-black text-slate-600 whitespace-nowrap text-[10px] sm:text-xs">النتيجة الدقيقة: 3 نقاط</span>
@@ -160,6 +177,12 @@ function App() {
                 <span className="font-black text-amber-700 whitespace-nowrap text-[10px] sm:text-xs">مباراة مصر: 5 نقاط لمطابقة النتيجة</span>
               </div>
             </div>
+            <button 
+              onClick={dismissPrizes}
+              className="bg-slate-900 text-white font-black px-4 py-2 rounded-xl text-[10px] sm:text-xs hover:bg-slate-800 transition-colors shrink-0 shadow-md sm:w-auto w-full"
+            >
+              فهمت ذلك
+            </button>
           </div>
         )}
 

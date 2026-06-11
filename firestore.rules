@@ -88,6 +88,8 @@ service cloud.firestore {
         && request.auth.uid == userId 
         && incoming().totalPoints == existing().totalPoints
       );
+
+      allow delete: if isAdmin();
     }
 
     match /matches/{matchId} {
@@ -130,6 +132,8 @@ service cloud.firestore {
         && request.time.toMillis() < get(/databases/$(database)/documents/matches/$(existing().matchId)).data.cutoffTime
         && incoming().updatedAt is number
       );
+
+      allow delete: if isAdmin();
     }
 
     match /bracket/{docId} {

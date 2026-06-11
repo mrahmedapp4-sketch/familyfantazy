@@ -74,6 +74,7 @@ function MatchCard({ match, userPrediction }: { match: Match, userPrediction?: P
   const [a, setA] = useState<number | ''>(userPrediction?.awayScore ?? '');
   const [loading, setLoading] = useState(false);
   const [isClosed, setIsClosed] = useState(Date.now() > match.cutoffTime || match.status === 'completed');
+  const [timeLeft, setTimeLeft] = useState<{days: number, hours: number, minutes: number, seconds: number} | null>(null);
 
   useEffect(() => {
     if (userPrediction) {
@@ -85,19 +86,42 @@ function MatchCard({ match, userPrediction }: { match: Match, userPrediction?: P
   useEffect(() => {
     if (match.status === 'completed') {
       setIsClosed(true);
+      setTimeLeft(null);
       return;
     }
-    const timeRemaining = Number(match.cutoffTime) - Date.now();
-    if (timeRemaining <= 0) {
-      setIsClosed(true);
-      return;
-    }
-    setIsClosed(false);
-    const timeoutId = setTimeout(() => {
-      setIsClosed(true);
-      notify(`انتهى وقت التوقع لمباراة: ${match.homeTeam} ضد ${match.awayTeam}`, 'warning');
-    }, timeRemaining);
-    return () => clearTimeout(timeoutId);
+
+    const updateTimer = () => {
+      const now = Date.now();
+      const difference = Number(match.cutoffTime) - now;
+
+      if (difference <= 0) {
+        setIsClosed(true);
+        setTimeLeft(null);
+        return false;
+      }
+
+      const days = Math.floor(difference / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((difference / (1000 * 60 * 60)) % 24);
+      const minutes = Math.floor((difference / 1000 / 60) % 60);
+      const seconds = Math.floor((difference / 1000) % 60);
+
+      setTimeLeft({ days, hours, minutes, seconds });
+      setIsClosed(false);
+      return true;
+    };
+
+    const isRunning = updateTimer();
+    if (!isRunning) return;
+
+    const intervalId = setInterval(() => {
+      const stillRunning = updateTimer();
+      if (!stillRunning) {
+        clearInterval(intervalId);
+        notify(`انتهى وقت التوقع لمباراة: ${match.homeTeam} ضد ${match.awayTeam}`, 'warning');
+      }
+    }, 1000);
+
+    return () => clearInterval(intervalId);
   }, [match.cutoffTime, match.status, match.homeTeam, match.awayTeam]);
 
   const handleSubmit = async () => {
@@ -136,16 +160,54 @@ function MatchCard({ match, userPrediction }: { match: Match, userPrediction?: P
   return (
     <div className="bg-white rounded-3xl border border-slate-100 p-6 sm:p-8 relative flex flex-col shadow-sm">
       {match.hasEgypt && (
-        <div className="absolute top-0 right-8 bg-amber-400 text-amber-900 text-[10px] font-black px-4 py-1.5 rounded-b-xl shadow-sm">
+        <div className="absolute top-0 right-8 bg-amber-400 text-amber-900 text-[10px] font-black px-4 py-1.5 rounded-b-xl shadow-sm z-10">
           مكافأة مصر: 5 نقاط
         </div>
       )}
       <div className="flex flex-col items-center">
-        <div className="text-xs font-bold text-slate-400 mb-6 text-center w-full pb-4 border-b border-slate-50 flex flex-col sm:flex-row justify-center sm:space-x-4 sm:space-x-reverse gap-2">
+        <div className="text-xs font-bold text-slate-400 mb-4 text-center w-full pb-4 border-b border-slate-50 flex flex-col sm:flex-row justify-center sm:space-x-4 sm:space-x-reverse gap-2">
           <span>المباراة: {new Date(match.kickoffTime).toLocaleString()}</span>
           {!isClosed && <span className="hidden sm:inline text-slate-300">•</span>}
           {!isClosed && <span className="text-amber-500">يُغلق: {new Date(match.cutoffTime).toLocaleTimeString()}</span>}
         </div>
+
+        {/* Dynamic Countdown Timer Display */}
+        {timeLeft && match.status !== 'completed' && (
+          <div className="mb-6 flex flex-col items-center justify-center bg-amber-50/50 border border-amber-100 rounded-2xl px-6 py-2.5 w-full max-w-sm shadow-sm">
+            <span className="text-[10px] font-black text-amber-600 mb-1.5">الوقت المتبقي للتوقع والاشتراك:</span>
+            <div className="flex items-center gap-3">
+              {timeLeft.days > 0 && (
+                <>
+                  <div className="flex flex-col items-center">
+                    <span className="font-mono text-sm sm:text-base font-black text-slate-800 leading-none">{timeLeft.days}</span>
+                    <span className="text-[8px] text-slate-400 mt-0.5 font-bold">يوم</span>
+                  </div>
+                  <span className="text-amber-300 font-bold text-xs -mt-2">:</span>
+                </>
+              )}
+              <div className="flex flex-col items-center">
+                <span className="font-mono text-sm sm:text-base font-black text-slate-800 leading-none">{String(timeLeft.hours).padStart(2, '0')}</span>
+                <span className="text-[8px] text-slate-400 mt-0.5 font-bold">ساعة</span>
+              </div>
+              <span className="text-amber-300 font-bold text-xs -mt-2">:</span>
+              <div className="flex flex-col items-center">
+                <span className="font-mono text-sm sm:text-base font-black text-slate-800 leading-none">{String(timeLeft.minutes).padStart(2, '0')}</span>
+                <span className="text-[8px] text-slate-400 mt-0.5 font-bold">دقيقة</span>
+              </div>
+              <span className="text-amber-300 font-bold text-xs -mt-2">:</span>
+              <div className="flex flex-col items-center">
+                <span className="font-mono text-sm sm:text-base font-black text-amber-600 leading-none animate-pulse">{String(timeLeft.seconds).padStart(2, '0')}</span>
+                <span className="text-[8px] text-slate-400 mt-0.5 font-bold">ثانية</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isClosed && match.status === 'pending' && (
+          <div className="mb-6 bg-red-50 border border-red-100 rounded-2xl px-6 py-2 w-full max-w-sm text-center text-xs font-black text-red-600">
+            تم إغلاق التوقع لهذه المباراة
+          </div>
+        )}
         
         <div className="flex items-center justify-center space-x-6 space-x-reverse w-full mb-8">
           <div className="flex flex-col items-center flex-1 min-w-0">
