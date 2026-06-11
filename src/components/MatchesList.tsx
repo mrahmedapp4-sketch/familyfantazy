@@ -76,6 +76,9 @@ function MatchCard({ match, userPrediction }: { match: Match, userPrediction?: P
   const [isClosed, setIsClosed] = useState(Date.now() > match.cutoffTime || match.status === 'completed');
   const [timeLeft, setTimeLeft] = useState<{days: number, hours: number, minutes: number, seconds: number} | null>(null);
 
+  const loggedInEmail = auth.currentUser?.email?.toLowerCase().trim();
+  const isAdminUser = loggedInEmail === 'mrahmedapp4@gmail.com' || loggedInEmail === 'admin@user.familyfantasy.com';
+
   useEffect(() => {
     if (userPrediction) {
       setH(userPrediction.homeScore);
@@ -126,6 +129,7 @@ function MatchCard({ match, userPrediction }: { match: Match, userPrediction?: P
 
   const handleSubmit = async () => {
     if (!auth.currentUser) return alert('الرجاء تسجيل الدخول أولا.');
+    if (isAdminUser) return alert('بصفتك مديراً، لا يمكنك المشاركة في التوقعات.');
     if (h === '' || a === '') return;
     if (isClosed) return alert('عذراً، انتهى وقت التوقع لهذه المباراة.');
 
@@ -234,7 +238,7 @@ function MatchCard({ match, userPrediction }: { match: Match, userPrediction?: P
               className="w-24 h-24 sm:w-28 sm:h-28 border border-slate-200 rounded-2xl text-center text-4xl sm:text-5xl font-black focus:border-slate-400 focus:bg-white outline-none bg-slate-50 transition-all disabled:opacity-50"
               value={h}
               onChange={e => setH(parseInt(e.target.value))}
-              disabled={isClosed || loading}
+              disabled={isClosed || loading || isAdminUser}
             />
             <span className="text-slate-300 font-bold text-xl sm:text-2xl">-</span>
             <input 
@@ -244,7 +248,7 @@ function MatchCard({ match, userPrediction }: { match: Match, userPrediction?: P
               className="w-24 h-24 sm:w-28 sm:h-28 border border-slate-200 rounded-2xl text-center text-4xl sm:text-5xl font-black focus:border-slate-400 focus:bg-white outline-none bg-slate-50 transition-all disabled:opacity-50"
               value={a}
               onChange={e => setA(parseInt(e.target.value))}
-              disabled={isClosed || loading}
+              disabled={isClosed || loading || isAdminUser}
             />
           </div>
         )}
@@ -267,13 +271,19 @@ function MatchCard({ match, userPrediction }: { match: Match, userPrediction?: P
         )}
 
         {match.status === 'pending' && (
-          <button 
-            onClick={handleSubmit} 
-            disabled={isClosed || loading}
-            className="w-full bg-slate-900 text-white py-4 font-black text-sm rounded-2xl hover:bg-slate-800 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed mt-2 hover:-translate-y-0.5 active:translate-y-0"
-          >
-            {isClosed ? 'انتهى وقت التوقع' : userPrediction ? 'تحديث التوقع' : 'تأكيد التوقع'}
-          </button>
+          isAdminUser ? (
+            <div className="w-full bg-slate-50 text-slate-400 py-4 font-black text-xs rounded-2xl text-center border border-slate-100 mt-2">
+              حساب المدير معفي من مشاركة التوقعات
+            </div>
+          ) : (
+            <button 
+              onClick={handleSubmit} 
+              disabled={isClosed || loading}
+              className="w-full bg-slate-900 text-white py-4 font-black text-sm rounded-2xl hover:bg-slate-800 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed mt-2 hover:-translate-y-0.5 active:translate-y-0"
+            >
+              {isClosed ? 'انتهى وقت التوقع' : userPrediction ? 'تحديث التوقع' : 'تأكيد التوقع'}
+            </button>
+          )
         )}
       </div>
     </div>

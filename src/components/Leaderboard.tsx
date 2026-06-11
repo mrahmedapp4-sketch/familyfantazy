@@ -11,7 +11,12 @@ export default function Leaderboard() {
   useEffect(() => {
     const q = query(collection(db, 'users'), orderBy('totalPoints', 'desc'), limit(100));
     const unsub = onSnapshot(q, (snapshot) => {
-      setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User)));
+      const allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+      const filtered = allUsers.filter(u => {
+        const email = (u.email || '').toLowerCase().trim();
+        return email !== 'mrahmedapp4@gmail.com' && email !== 'admin@user.familyfantasy.com';
+      });
+      setUsers(filtered);
       if (initialLoad.current) {
         initialLoad.current = false;
       } else {

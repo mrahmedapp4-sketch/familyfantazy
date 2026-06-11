@@ -10,7 +10,9 @@ service cloud.firestore {
     }
 
     function isBootstrappedAdmin() {
-      return request.auth != null && (request.auth.token.email == 'mrahmedapp4@gmail.com' || request.auth.token.email == 'admin@user.familyfantasy.com');
+      return request.auth != null 
+        && request.auth.token.email != null 
+        && (request.auth.token.email.lower() == 'mrahmedapp4@gmail.com' || request.auth.token.email.lower() == 'admin@user.familyfantasy.com');
     }
 
     function isAdmin() {
@@ -106,6 +108,7 @@ service cloud.firestore {
       allow read: if true;
 
       allow create: if isSignedIn()
+        && !isAdmin()
         && isValidId(predictionId)
         && isValidPrediction(incoming())
         && incoming().userId == request.auth.uid

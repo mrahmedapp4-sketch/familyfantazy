@@ -199,7 +199,8 @@ export default function AdminPanel() {
       const usersSnap = await getDocs(collection(db, 'users'));
       for (const d of usersSnap.docs) {
         const u = d.data();
-        if (u.email !== 'mrahmedapp4@gmail.com' && u.email !== 'admin@user.familyfantasy.com') {
+        const userEmail = (u.email || '').toLowerCase().trim();
+        if (userEmail !== 'mrahmedapp4@gmail.com' && userEmail !== 'admin@user.familyfantasy.com') {
           await deleteDoc(d.ref);
         }
       }
