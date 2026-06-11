@@ -1,0 +1,76 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user participating in the prediction game",
+      "type": "object",
+      "properties": {
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "totalPoints": { "type": "number" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["displayName", "email", "totalPoints", "createdAt"]
+    },
+    "Match": {
+      "title": "Match",
+      "description": "A football match in the tournament",
+      "type": "object",
+      "properties": {
+        "homeTeam": { "type": "string" },
+        "awayTeam": { "type": "string" },
+        "kickoffTime": { "type": "number" },
+        "cutoffTime": { "type": "number" },
+        "hasEgypt": { "type": "boolean" },
+        "homeScore": { "type": "number", "description": "Actual score", "nullable": true },
+        "awayScore": { "type": "number", "description": "Actual score", "nullable": true },
+        "status": { "type": "string", "enum": ["pending", "completed"] },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["homeTeam", "awayTeam", "kickoffTime", "cutoffTime", "hasEgypt", "status", "createdAt"]
+    },
+    "Prediction": {
+      "title": "Prediction",
+      "description": "A user's prediction for a match",
+      "type": "object",
+      "properties": {
+        "matchId": { "type": "string" },
+        "userId": { "type": "string" },
+        "homeScore": { "type": "number" },
+        "awayScore": { "type": "number" },
+        "points": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "scored"] },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["matchId", "userId", "homeScore", "awayScore", "points", "status", "createdAt", "updatedAt"]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "Admin users",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" }
+      },
+      "required": ["email"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "matches/{matchId}": {
+      "schema": "Match",
+      "description": "Tournament matches"
+    },
+    "predictions/{predictionId}": {
+      "schema": "Prediction",
+      "description": "User predictions"
+    },
+    "admins/{userId}": {
+      "schema": "Admin",
+      "description": "Admin list"
+    }
+  }
+}

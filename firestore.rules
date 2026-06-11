@@ -1,0 +1,150 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isBootstrappedAdmin() {
+      return request.auth != null && (request.auth.token.email == 'mrahmedapp4@gmail.com' || request.auth.token.email == 'admin@user.familyfantasy.com');
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin() || (isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Validation Helpers ---
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['displayName', 'email', 'totalPoints', 'createdAt'])
+        && data.displayName is string && data.displayName.size() <= 100 && data.displayName.size() > 0
+        && data.email is string && data.email.size() <= 200
+        && data.totalPoints is number
+        && data.createdAt is number;
+    }
+
+    function isValidMatch(data) {
+      return data.keys().hasAll(['homeTeam', 'awayTeam', 'kickoffTime', 'cutoffTime', 'hasEgypt', 'status', 'createdAt'])
+        && data.homeTeam is string && data.homeTeam.size() <= 100
+        && data.awayTeam is string && data.awayTeam.size() <= 100
+        && data.kickoffTime is number
+        && data.cutoffTime is number
+        && data.hasEgypt is bool
+        && (data.status == 'pending' || data.status == 'completed')
+        && data.createdAt is number
+        && (!('stage' in data) || data.stage is string)
+        && (!('bracketOrder' in data) || data.bracketOrder is number)
+        && (!('homeScore' in data) || data.homeScore == null || data.homeScore is number)
+        && (!('awayScore' in data) || data.awayScore == null || data.awayScore is number);
+    }
+
+    function isValidPrediction(data) {
+      return data.keys().hasAll(['matchId', 'userId', 'homeScore', 'awayScore', 'points', 'status', 'createdAt', 'updatedAt'])
+        && data.matchId is string && data.matchId.size() <= 128
+        && data.userId is string && data.userId.size() <= 128
+        && data.homeScore is number && data.homeScore >= 0
+        && data.awayScore is number && data.awayScore >= 0
+        && data.points is number
+        && (data.status == 'pending' || data.status == 'scored')
+        && data.createdAt is number
+        && data.updatedAt is number;
+    }
+
+    // --- Collections ---
+
+    match /users/{userId} {
+      allow get: if isSignedIn() || isValidId(userId); 
+      allow list: if true; 
+
+      allow create: if isSignedIn()
+        && request.auth.uid == userId
+        && isValidId(userId)
+        && isValidUser(incoming())
+        && incoming().totalPoints == 0
+        && incoming().createdAt is number;
+
+      allow update: if isAdmin() || (
+        isSignedIn()
+        && isValidId(userId)
+        && isValidUser(incoming())
+        && incoming().email == existing().email
+        && incoming().createdAt == existing().createdAt
+        && request.auth.uid == userId 
+        && incoming().totalPoints == existing().totalPoints
+      );
+    }
+
+    match /matches/{matchId} {
+      allow read: if true;
+
+      allow create: if isAdmin() && incoming().status == 'pending';
+
+      allow update: if isAdmin() && incoming().createdAt == existing().createdAt;
+
+      allow delete: if isAdmin();
+    }
+
+    match /predictions/{predictionId} {
+      allow read: if true;
+
+      allow create: if isSignedIn()
+        && isValidId(predictionId)
+        && isValidPrediction(incoming())
+        && incoming().userId == request.auth.uid
+        && incoming().status == 'pending'
+        && incoming().points == 0
+        && exists(/databases/$(database)/documents/matches/$(incoming().matchId))
+        && get(/databases/$(database)/documents/matches/$(incoming().matchId)).data.status == 'pending'
+        && request.time.toMillis() < get(/databases/$(database)/documents/matches/$(incoming().matchId)).data.cutoffTime
+        && incoming().createdAt is number
+        && incoming().updatedAt is number;
+
+      allow update: if isAdmin() || (
+        isSignedIn()
+        && isValidId(predictionId)
+        && isValidPrediction(incoming())
+        && incoming().userId == existing().userId
+        && incoming().matchId == existing().matchId
+        && incoming().createdAt == existing().createdAt
+        && request.auth.uid == existing().userId
+        && incoming().points == existing().points
+        && incoming().status == existing().status
+        && existing().status == 'pending'
+        && get(/databases/$(database)/documents/matches/$(existing().matchId)).data.status == 'pending'
+        && request.time.toMillis() < get(/databases/$(database)/documents/matches/$(existing().matchId)).data.cutoffTime
+        && incoming().updatedAt is number
+      );
+    }
+
+    match /bracket/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /api_keys/{keyId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /admins/{userId} {
+      allow read: if isBootstrappedAdmin() || (isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+      allow write: if isBootstrappedAdmin();
+    }
+  }
+}
