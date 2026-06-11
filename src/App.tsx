@@ -4,6 +4,7 @@ import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndP
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from './lib/firebase';
 import { User } from './types';
+import { isAdmin } from './lib/admin';
 
 import MatchesList from './components/MatchesList';
 import Leaderboard from './components/Leaderboard';
@@ -134,7 +135,7 @@ function App() {
                 <span className="text-sm font-black text-slate-700">{user?.displayName || auth.currentUser.email}</span>
               </div>
               <div className="h-10 w-[1px] bg-slate-200 hidden sm:block"></div>
-              {(auth.currentUser.email === 'mrahmedapp4@gmail.com' || auth.currentUser.email === 'admin@user.familyfantasy.com') && (
+              {auth.currentUser && isAdmin(auth.currentUser.email ?? undefined, user?.displayName) && (
                 <Link to="/admin" className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-black py-2 px-4 rounded-xl transition-colors">
                   لوحة التحكم
                 </Link>
@@ -189,7 +190,7 @@ function App() {
         <main className="flex-1 flex flex-col p-4 sm:p-8 max-w-5xl mx-auto w-full">
           <Routes>
             <Route path="/" element={<Home user={user} onUserCreated={setUser} />} />
-            <Route path="/admin" element={<AdminRoute />} />
+            <Route path="/admin" element={<AdminRoute user={user} />} />
           </Routes>
         </main>
 
@@ -238,7 +239,7 @@ function App() {
 
 function Home({ user, onUserCreated }: { user: User | null, onUserCreated: (u: User) => void }) {
   if (!auth.currentUser || !user) return <LoginScreen onUserCreated={onUserCreated} />;
-  return <Dashboard />;
+  return <Dashboard user={user} />;
 }
 
 function getDeviceId() {
@@ -371,7 +372,7 @@ function LoginScreen({ onUserCreated }: { onUserCreated: (u: User) => void }) {
   );
 }
 
-function Dashboard() {
+function Dashboard({ user }: { user: User | null }) {
   const [tab, setTab] = useState<'matches' | 'leaderboard' | 'bracket'>('matches');
 
   return (
@@ -383,7 +384,7 @@ function Dashboard() {
       </div>
 
       <div className="pt-2">
-        {tab === 'matches' && <MatchesList />}
+        {tab === 'matches' && <MatchesList user={user} />}
         {tab === 'leaderboard' && <Leaderboard />}
         {tab === 'bracket' && <BracketMap />}
       </div>
@@ -391,7 +392,7 @@ function Dashboard() {
   );
 }
 
-function AdminRoute() {
+function AdminRoute({ user }: { user: User | null }) {
   const navigate = useNavigate();
 
   if (!auth.currentUser) {
@@ -407,11 +408,11 @@ function AdminRoute() {
       </div>
     );
   }
-  if (auth.currentUser.email !== 'mrahmedapp4@gmail.com' && auth.currentUser.email !== 'admin@user.familyfantasy.com') {
+  if (!user || !isAdmin(auth.currentUser.email ?? undefined, user.displayName)) {
     return (
       <div className="flex flex-col items-center justify-center p-10 mt-10">
         <div className="text-red-500 font-black text-xl mb-6">عذراً، لا تملك صلاحية الإدارة بحسابك الحالي.</div>
-        <p className="text-slate-500 mb-8 font-bold text-center leading-relaxed">
+        <p className="text-slate-300 mb-8 font-bold text-center leading-relaxed">
           أنت مسجل الدخول كـ {auth.currentUser.email}.<br/>
           للدخول كمسؤول، اضغط على كلمة "FamilyFantasy" في أعلى الصفحة واكتب كلمة المرور الخاصة بالإدارة.
         </p>

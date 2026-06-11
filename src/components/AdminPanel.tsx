@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, doc, getDocs, where, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Match, Prediction, User } from '../types';
+import { isAdmin } from '../lib/admin';
 
 export default function AdminPanel() {
   const [matches, setMatches] = useState<Match[]>([]);
@@ -200,7 +201,8 @@ export default function AdminPanel() {
       for (const d of usersSnap.docs) {
         const u = d.data();
         const userEmail = (u.email || '').toLowerCase().trim();
-        if (userEmail !== 'mrahmedapp4@gmail.com' && userEmail !== 'admin@user.familyfantasy.com') {
+        const dName = u.displayName || '';
+        if (!isAdmin(userEmail, dName)) {
           await deleteDoc(d.ref);
         }
       }

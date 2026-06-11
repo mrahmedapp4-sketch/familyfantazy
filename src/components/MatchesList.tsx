@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, doc, getDocs, where } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
-import { Match, Prediction } from '../types';
+import { Match, Prediction, User } from '../types';
 import { notify } from '../lib/notifications';
+import { canPredict } from '../lib/admin';
 
-export default function MatchesList() {
+export default function MatchesList({ user }: { user?: User | null }) {
   const [matches, setMatches] = useState<Match[]>([]);
   const [predictions, setPredictions] = useState<Record<string, Prediction>>({});
   const initialLoad = useRef(true);
@@ -47,7 +48,7 @@ export default function MatchesList() {
         <h2 className="text-sm font-bold text-slate-500 mb-6 px-2">توقعات المباريات القادمة</h2>
         <div className="space-y-6">
           {pendingMatches.map(m => (
-            <MatchCard key={m.id} match={m} userPrediction={predictions[m.id]} />
+            <MatchCard key={m.id} match={m} userPrediction={predictions[m.id]} user={user} />
           ))}
           {pendingMatches.length === 0 && (
             <div className="p-8 text-center bg-white rounded-2xl border border-slate-100 text-slate-400 font-bold text-sm shadow-sm">لا توجد مباريات متاحة حالياً.</div>
@@ -60,7 +61,7 @@ export default function MatchesList() {
           <h2 className="text-sm font-bold text-slate-500 mb-6 px-2">نتائج المباريات السابقة</h2>
           <div className="space-y-6">
             {completedMatches.map(m => (
-              <MatchCard key={m.id} match={m} userPrediction={predictions[m.id]} />
+              <MatchCard key={m.id} match={m} userPrediction={predictions[m.id]} user={user} />
             ))}
           </div>
         </div>
@@ -69,15 +70,15 @@ export default function MatchesList() {
   );
 }
 
-function MatchCard({ match, userPrediction }: { match: Match, userPrediction?: Prediction }) {
+function MatchCard({ match, userPrediction, user }: { match: Match, userPrediction?: Prediction, user?: User | null }) {
   const [h, setH] = useState<number | ''>(userPrediction?.homeScore ?? '');
   const [a, setA] = useState<number | ''>(userPrediction?.awayScore ?? '');
   const [loading, setLoading] = useState(false);
   const [isClosed, setIsClosed] = useState(Date.now() > match.cutoffTime || match.status === 'completed');
   const [timeLeft, setTimeLeft] = useState<{days: number, hours: number, minutes: number, seconds: number} | null>(null);
 
-  const loggedInEmail = auth.currentUser?.email?.toLowerCase().trim();
-  const isAdminUser = loggedInEmail === 'mrahmedapp4@gmail.com' || loggedInEmail === 'admin@user.familyfantasy.com';
+  const isAllowedToPredict = canPredict(user?.email || auth.currentUser?.email, user?.displayName);
+  const isAdminUser = !isAllowedToPredict;
 
   useEffect(() => {
     if (userPrediction) {
