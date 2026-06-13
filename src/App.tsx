@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
 import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, signOut, updatePassword } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from './lib/firebase';
 import { User } from './types';
 import { isAdmin } from './lib/admin';
@@ -46,9 +46,47 @@ function App() {
   const [adminLoading, setAdminLoading] = useState(false);
   const [showPrizesBar, setShowPrizesBar] = useState(() => !localStorage.getItem('ff_prizes_seen'));
 
+  const [showEditName, setShowEditName] = useState(false);
+  const [editNameValue, setEditNameValue] = useState('');
+  const [editingNameLoading, setEditingNameLoading] = useState(false);
+
   const dismissPrizes = () => {
     localStorage.setItem('ff_prizes_seen', 'true');
     setShowPrizesBar(false);
+  };
+
+  const handleEditNameSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!auth.currentUser) return;
+    const cleanName = editNameValue.trim().replace(/\s+/g, ' ');
+    if (!cleanName) {
+      alert('الرجاء إدخال الاسم');
+      return;
+    }
+    const lowerName = cleanName.toLowerCase();
+    if (lowerName.includes('abdelwahab') || lowerName.includes('عبدالوهاب') || lowerName.includes('عبد الوهاب')) {
+      alert('هذا الاسم محجوز وغير مسموح به.');
+      return;
+    }
+    if (cleanName.length < 3) {
+      alert('الاسم يجب أن يتكون من 3 أحرف على الأقل');
+      return;
+    }
+
+    setEditingNameLoading(true);
+    try {
+      const userRef = doc(db, 'users', auth.currentUser.uid);
+      await updateDoc(userRef, { displayName: cleanName });
+      if (user) {
+        setUser({ ...user, displayName: cleanName });
+      }
+      setShowEditName(false);
+      alert('تم تحديث الاسم بنجاح!');
+    } catch (err: any) {
+      alert("حدث خطأ أثناء تعديل الاسم: " + err.message);
+    } finally {
+      setEditingNameLoading(false);
+    }
   };
 
   // One-time automatic background cleanup for abdelwahab leftovers in Firestore users collection
@@ -171,9 +209,20 @@ function App() {
                   <span>🏆</span>
                   <span>{user?.totalPoints ?? 0} {user?.totalPoints === 1 ? 'نقطة' : 'نقاط'}</span>
                 </div>
+                {user && (
+                  <button 
+                    onClick={() => { setEditNameValue(user.displayName); setShowEditName(true); }}
+                    className="p-2.5 text-slate-400 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 rounded-xl transition-colors shrink-0 cursor-pointer"
+                    title="تعديل اسمك"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                    </svg>
+                  </button>
+                )}
                 <button 
                   onClick={() => { if (window.confirm("هل تريد تسجيل الخروج؟")) signOut(auth); }} 
-                  className="p-2.5 text-slate-400 hover:text-red-500 bg-slate-50 hover:bg-red-50 rounded-xl transition-colors shrink-0"
+                  className="p-2.5 text-slate-400 hover:text-red-500 bg-slate-50 hover:bg-red-50 rounded-xl transition-colors shrink-0 cursor-pointer"
                   title="تسجيل الخروج"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
@@ -250,6 +299,57 @@ function App() {
                   >
                     {adminLoading ? 'جاري الدخول...' : 'دخول مسار الإدارة'}
                   </button>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showEditName && (
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4" dir="rtl">
+            <div className="bg-white rounded-[2rem] p-8 w-full max-w-sm shadow-2xl relative border border-slate-100">
+              <button 
+                onClick={() => setShowEditName(false)}
+                className="absolute top-4 left-4 text-slate-400 hover:text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-full w-8 h-8 flex items-center justify-center transition-colors cursor-pointer"
+                title="إغلاق"
+              >
+                ✕
+              </button>
+              <div className="flex flex-col items-center">
+                <div className="w-12 h-12 bg-slate-900 text-white flex items-center justify-center rounded-xl shadow-lg mb-4">
+                  <span className="font-black text-xl">FF</span>
+                </div>
+                <h2 className="text-xl font-black text-slate-800 tracking-tight mb-2">تعديل اسمك</h2>
+                <p className="text-slate-500 text-xs font-bold mb-6 text-center">اكتب الاسم الجديد الذي سيظهر للجميع في الترتيب</p>
+                
+                <form onSubmit={handleEditNameSubmit} className="w-full space-y-4">
+                  <input 
+                    type="text"
+                    placeholder="اسمك الجديد (مثال: أحمد محمد)"
+                    value={editNameValue}
+                    onChange={(e) => setEditNameValue(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-center text-sm font-bold focus:border-slate-400 focus:bg-white outline-none transition-all placeholder:font-normal text-slate-800"
+                    maxLength={25}
+                    required
+                    autoFocus
+                  />
+                  <div className="flex gap-2">
+                    <button 
+                      type="submit"
+                      disabled={editingNameLoading}
+                      className="flex-1 py-3 bg-slate-900 text-white text-sm font-black rounded-xl shadow-md hover:bg-slate-800 disabled:opacity-50 transition-all hover:-translate-y-0.5 cursor-pointer"
+                    >
+                      {editingNameLoading ? 'جاري الحفظ...' : 'حفظ الاسم الجديد'}
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => setShowEditName(false)}
+                      disabled={editingNameLoading}
+                      className="py-3 px-4 bg-slate-100 text-slate-600 text-sm font-bold rounded-xl hover:bg-slate-200 transition-colors cursor-pointer"
+                    >
+                      إلغاء
+                    </button>
+                  </div>
                 </form>
               </div>
             </div>
