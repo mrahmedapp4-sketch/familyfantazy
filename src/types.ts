@@ -29,6 +29,7 @@ export interface Prediction {
   awayScore: number;
   points: number;
   status: 'pending' | 'scored';
+  isPrivate?: boolean;
   createdAt: number;
   updatedAt: number;
 }

@@ -89,17 +89,26 @@ function App() {
     }
   };
 
-  // One-time automatic background cleanup for abdelwahab leftovers in Firestore users collection
+  // One-time automatic background cleanup for leftovers in Firestore users collection
   useEffect(() => {
     const runCleanup = async () => {
       try {
-        const { collection, getDocs, deleteDoc } = await import('firebase/firestore');
+        const { collection, getDocs, deleteDoc, query, where } = await import('firebase/firestore');
         const usersSnap = await getDocs(collection(db, 'users'));
         for (const docObj of usersSnap.docs) {
           const data = docObj.data();
           const dName = (data.displayName || '').toLowerCase().trim();
           const email = (data.email || '').toLowerCase().trim();
-          if (dName.includes('abdelwahab') || email.includes('abdelwahab')) {
+          const matchesAbdelwahab = dName.includes('abdelwahab') || email.includes('abdelwahab');
+          const matchesAnas = dName.includes('anas') || email.includes('anas') || dName.includes('أنس') || dName.includes('انس');
+          
+          if (matchesAbdelwahab || matchesAnas) {
+            // Delete predictions of this user to keep data cleanly synchronized
+            const predSnap = await getDocs(query(collection(db, 'predictions'), where('userId', '==', docObj.id)));
+            for (const pDoc of predSnap.docs) {
+              await deleteDoc(pDoc.ref);
+            }
+            // Delete user doc
             await deleteDoc(docObj.ref);
           }
         }

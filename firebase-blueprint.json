@@ -40,6 +40,7 @@
         "awayScore": { "type": "number" },
         "points": { "type": "number" },
         "status": { "type": "string", "enum": ["pending", "scored"] },
+        "isPrivate": { "type": "boolean" },
         "createdAt": { "type": "number" },
         "updatedAt": { "type": "number" }
       },

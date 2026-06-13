@@ -65,7 +65,8 @@ service cloud.firestore {
         && data.points is number
         && (data.status == 'pending' || data.status == 'scored')
         && data.createdAt is number
-        && data.updatedAt is number;
+        && data.updatedAt is number
+        && (!('isPrivate' in data) || data.isPrivate is bool);
     }
 
     // --- Collections ---
