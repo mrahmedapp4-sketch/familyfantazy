@@ -21,6 +21,10 @@ export default function AdminPanel() {
   const [apiKeys, setApiKeys] = useState<{ id: string, key: string, name: string, createdAt: number }[]>([]);
   const [newKeyName, setNewKeyName] = useState('');
 
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmText, setConfirmText] = useState('');
+  const [isClearing, setIsClearing] = useState(false);
+
   const showMsg = (text: string, type: 'error'|'success' = 'success') => {
     setStatusMsg({text, type});
     setTimeout(() => setStatusMsg(null), 5000);
@@ -173,14 +177,14 @@ export default function AdminPanel() {
     }
   };
 
-  const clearDatabase = async () => {
-    const code = window.prompt("هل أنت متأكد من مسح البيانات السابقة وحذف حسابات اللاعبين؟ اكتب 'تأكيد' للتأكيد.");
-    if (code !== 'تأكيد') {
-      showMsg("تم إلغاء مسح البيانات.", 'error');
+  const clearDatabaseSubmit = async () => {
+    if (confirmText !== 'مسح') {
+      showMsg("كلمة التأكيد غير صحيحة.", 'error');
       return;
     }
+    setIsClearing(true);
     try {
-      showMsg("جاري تنظيف وحذف البيانات...", 'success');
+      showMsg("جاري تنظيف وحذف البيانات المحددة...", 'success');
       
       const matchesQuery = query(collection(db, 'matches'), where('status', '==', 'completed'));
       const matchesSnap = await getDocs(matchesQuery);
@@ -190,13 +194,13 @@ export default function AdminPanel() {
         await deleteDoc(d.ref);
       }
       
-      // Delete all predictions (since accounts are being cleared)
+      // Delete all predictions
       const predsSnap = await getDocs(collection(db, 'predictions'));
       for (const d of predsSnap.docs) {
         await deleteDoc(d.ref);
       }
       
-      // Delete all non-admin user documents from Firestore
+      // Delete all non-admin user documents from Firestore and set points of admin/host accounts to 0
       const usersSnap = await getDocs(collection(db, 'users'));
       for (const d of usersSnap.docs) {
         const u = d.data();
@@ -204,12 +208,19 @@ export default function AdminPanel() {
         const dName = u.displayName || '';
         if (!isAdmin(userEmail, dName)) {
           await deleteDoc(d.ref);
+        } else {
+          // Reset admin/host points to 0
+          await updateDoc(d.ref, { totalPoints: 0 });
         }
       }
       
-      showMsg("تم تنظيف المباريات السابقة وحذف جميع حسابات اللاعبين وتوقعاتهم بنجاح!");
+      showMsg("تم تنظيف المباريات السابقة وحذف جميع حسابات اللاعبين وتوقعاتهم وتصفير نقاط المشرفين بنجاح!");
+      setConfirmDelete(false);
+      setConfirmText('');
     } catch(err: any) {
       showMsg("خطأ أثناء التنظيف: " + err.message, 'error');
+    } finally {
+      setIsClearing(false);
     }
   };
 
@@ -306,17 +317,50 @@ export default function AdminPanel() {
         </div>
       </div>
 
-      <div className="bg-red-50 p-4 sm:p-8 rounded-2xl border border-red-200 shadow-sm mt-8">
+      <div className="bg-red-50 p-4 sm:p-8 rounded-2xl border border-red-200 shadow-sm mt-8 col-span-1 md:col-span-2">
         <h2 className="text-sm font-bold text-red-700 mb-4">منطقة خطرة (Danger Zone)</h2>
         <p className="text-xs text-red-600 mb-6 font-bold leading-relaxed">
-          تنظيف قاعدة البيانات للمباريات وحسابات اللاعبين السابقة فقط. سيتم حذف جميع حسابات اللاعبين (ما عدا المشرفين)، وكل توقعاتهم، والمباريات المكتملة السابقة بشكل نهائي لتبدأ البطولة/الحدث الجديد بصفحة بيضاء. لن يتم حذف المباريات القادمة Pending.
+          تنظيف قاعدة البيانات للمباريات وحسابات اللاعبين السابقة فقط. سيتم حذف جميع حسابات اللاعبين (ما عدا المشرفين)، وكل توقعاتهم، والمباريات المكتملة السابقة وتصفير نقاط الآدمن بشكل نهائي لتبدأ البطولة/الحدث الجديد بصفحة بيضاء. لن يتم حذف المباريات القادمة Pending.
         </p>
-        <button 
-          onClick={clearDatabase} 
-          className="bg-red-600 text-white font-black px-6 py-3 rounded-xl hover:bg-red-700 transition-colors shadow-md text-sm w-full sm:w-auto"
-        >
-          تنظيف المباريات السابقة وحذف جميع حسابات اللاعبين
-        </button>
+        
+        {confirmDelete ? (
+          <div className="space-y-4">
+            <div className="p-4 bg-white border border-red-200 rounded-xl">
+              <span className="block text-xs font-black text-red-700 mb-2">تنبيه: أنت على وشك حذف جميع البيانات وتوقعات اللاعبين نهائياً!</span>
+              <p className="text-[11px] text-slate-500 font-bold mb-3">لتأكيد العملية، يرجى كتابة كلمة <span className="text-red-600 font-black px-2 py-0.5 bg-red-50 border border-red-100 rounded">مسح</span> في الحقل أدناه وضغط زر التأكيد:</p>
+              <input 
+                type="text" 
+                value={confirmText} 
+                onChange={e => setConfirmText(e.target.value)} 
+                placeholder="اكتب 'مسح' هنا" 
+                className="px-4 py-2 text-sm border border-slate-200 focus:border-red-400 bg-white outline-none rounded-xl w-full max-w-xs font-bold text-slate-800"
+              />
+            </div>
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={clearDatabaseSubmit} 
+                disabled={confirmText !== 'مسح' || isClearing}
+                className="bg-red-600 disabled:opacity-50 text-white font-black px-6 py-3 rounded-xl hover:bg-red-700 transition-colors shadow-md text-sm cursor-pointer"
+              >
+                {isClearing ? 'جاري حذف البيانات...' : 'نعم، احذف نهائياً'}
+              </button>
+              <button 
+                onClick={() => { setConfirmDelete(false); setConfirmText(''); }} 
+                disabled={isClearing}
+                className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-black px-6 py-3 rounded-xl transition-colors text-sm cursor-pointer"
+              >
+                إلغاء المعاملة
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button 
+            onClick={() => setConfirmDelete(true)} 
+            className="bg-red-600 text-white font-black px-6 py-3 rounded-xl hover:bg-red-700 transition-colors shadow-md text-sm w-full sm:w-auto cursor-pointer"
+          >
+            تنظيف المباريات السابقة وحذف جميع حسابات اللاعبين
+          </button>
+        )}
       </div>
     </div>
   );

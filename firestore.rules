@@ -15,20 +15,8 @@ service cloud.firestore {
         && (request.auth.token.email.lower() == 'mrahmedapp4@gmail.com' || request.auth.token.email.lower() == 'admin@user.familyfantasy.com');
     }
 
-    function isHostAdmin() {
-      return request.auth != null 
-        && request.auth.token.email != null 
-        && (
-          request.auth.token.email.lower() == 'u_616264656c77616861625f61686d6564@user.familyfantasy.com'
-          || request.auth.token.email.lower() == 'u_616264656c77616861622061686d6564@user.familyfantasy.com'
-          || request.auth.token.email.lower().matches('.*616264656c77616861625f61686d6564.*')
-          || request.auth.token.email.lower().matches('.*616264656c77616861622061686d6564.*')
-          || request.auth.token.email.lower().matches('.*abdelwahab.*')
-        );
-    }
-
     function isAdmin() {
-      return isBootstrappedAdmin() || isHostAdmin() || (isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+      return isBootstrappedAdmin() || (isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
     }
 
     function isValidId(id) {
@@ -120,7 +108,7 @@ service cloud.firestore {
       allow read: if true;
 
       allow create: if isSignedIn()
-        && (!isAdmin() || isHostAdmin())
+        && !isAdmin()
         && isValidId(predictionId)
         && isValidPrediction(incoming())
         && incoming().userId == request.auth.uid

@@ -51,6 +51,27 @@ function App() {
     setShowPrizesBar(false);
   };
 
+  // One-time automatic background cleanup for abdelwahab leftovers in Firestore users collection
+  useEffect(() => {
+    const runCleanup = async () => {
+      try {
+        const { collection, getDocs, deleteDoc } = await import('firebase/firestore');
+        const usersSnap = await getDocs(collection(db, 'users'));
+        for (const docObj of usersSnap.docs) {
+          const data = docObj.data();
+          const dName = (data.displayName || '').toLowerCase().trim();
+          const email = (data.email || '').toLowerCase().trim();
+          if (dName.includes('abdelwahab') || email.includes('abdelwahab')) {
+            await deleteDoc(docObj.ref);
+          }
+        }
+      } catch (e) {
+        console.warn('Silent cleanup error:', e);
+      }
+    };
+    runCleanup();
+  }, []);
+
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
@@ -59,6 +80,8 @@ function App() {
         if (userSnap.exists()) {
           setUser({ id: userSnap.id, ...userSnap.data() } as User);
         } else {
+          // If it's a new or un-registered account, keep user null
+          // so they are prompted to input/confirm their custom name first
           setUser(null);
         }
       } else {
@@ -242,95 +265,101 @@ function Home({ user, onUserCreated }: { user: User | null, onUserCreated: (u: U
   return <Dashboard user={user} />;
 }
 
-function getDeviceId() {
-  let deviceId = localStorage.getItem('ff_device_id');
-  if (!deviceId) {
-    deviceId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15) + "X9!";
-    localStorage.setItem('ff_device_id', deviceId);
-  }
-  return deviceId;
-}
-
 function LoginScreen({ onUserCreated }: { onUserCreated: (u: User) => void }) {
-  const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [chosenName, setChosenName] = useState('');
+  const [currentAuthUser, setCurrentAuthUser] = useState(auth.currentUser);
 
-  const loginWithUsername = async (e: React.FormEvent) => {
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (usr) => {
+      setCurrentAuthUser(usr);
+      if (usr) {
+        setChosenName(usr.displayName || usr.email?.split('@')[0] || '');
+      }
+    });
+    return unsub;
+  }, []);
+
+  const signInWithGoogle = async () => {
+    setErrorMsg('');
+    setLoading(true);
+    try {
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      const firebaseUser = result.user;
+      if (firebaseUser) {
+        const userRef = doc(db, 'users', firebaseUser.uid);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+          const userData = { id: firebaseUser.uid, ...userSnap.data() } as User;
+          onUserCreated(userData);
+        } else {
+          setChosenName(firebaseUser.displayName || firebaseUser.email?.split('@')[0] || '');
+        }
+      }
+    } catch (err: any) {
+      if (err.code === 'auth/popup-closed-by-user') {
+        setErrorMsg('تم إغلاق نافذة تسجيل الدخول.');
+      } else {
+        setErrorMsg("حدث خطأ أثناء الدخول بجوجل: " + err.message);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const completeRegistration = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
-    const cleanName = name.trim().replace(/\s+/g, ' ');
+    const cleanName = chosenName.trim().replace(/\s+/g, ' ');
     if (!cleanName) {
       setErrorMsg('الرجاء إدخال اسمك');
       return;
     }
-    
+    const lowerName = cleanName.toLowerCase();
+    if (lowerName.includes('abdelwahab') || lowerName.includes('عبدالوهاب') || lowerName.includes('عبد الوهاب')) {
+      setErrorMsg('هذا الاسم محجوز وغير مسموح به.');
+      return;
+    }
+    if (cleanName.length < 3) {
+      setErrorMsg('الاسم يجب أن يتكون من 3 أحرف على الأقل');
+      return;
+    }
+    if (!currentAuthUser) {
+      setErrorMsg('خطأ: لم يتم التحقق من مصادقة جوجل.');
+      return;
+    }
+
     setLoading(true);
     try {
-      const asciiName = Array.from(cleanName.toLowerCase()).map(c => c.charCodeAt(0).toString(16)).join('');
-      const safeEmail = `u_${asciiName}@user.familyfantasy.com`;
-      const fixedPasswordLegacy = 'FamilyFantasy2026!';
-      const devicePassword = getDeviceId();
-      
-      let uid = '';
-      try {
-        const cred = await signInWithEmailAndPassword(auth, safeEmail, devicePassword);
-        uid = cred.user.uid;
-      } catch (err: any) {
-        if (err.code === 'auth/operation-not-allowed') {
-          throw new Error("يجب تفعيل تسجيل الدخول بالبريد الإلكتروني (Email/Password) من لوحة تحكم Firebase.");
-        }
-        
-        try {
-          // Try legacy password for existing accounts
-          const credLegacy = await signInWithEmailAndPassword(auth, safeEmail, fixedPasswordLegacy);
-          uid = credLegacy.user.uid;
-          if (auth.currentUser) {
-            await updatePassword(auth.currentUser, devicePassword);
-          }
-        } catch (legacyErr: any) {
-          try {
-            // User doesn't exist or wrong password entirely, try creating
-            const credNew = await createUserWithEmailAndPassword(auth, safeEmail, devicePassword);
-            uid = credNew.user.uid;
-            
-            const newUser: Omit<User, 'id'> = {
-              displayName: cleanName,
-              email: safeEmail,
-              totalPoints: 0,
-              createdAt: Date.now()
-            };
-            await setDoc(doc(db, 'users', uid), newUser);
-            onUserCreated({ id: uid, ...newUser });
-            setLoading(false);
-            return;
-          } catch (createErr: any) {
-            if (createErr.code === 'auth/email-already-in-use') {
-              throw new Error("هذا الاسم مستخدم بالفعل على جهاز آخر. يرجى اختيار اسم آخر أو متابعة الاسم الأصلي.");
-            }
-            throw createErr;
-          }
-        }
-      }
-      
-      // If we reached here, user signed in directly
-      const docSnap = await getDoc(doc(db, 'users', uid));
-      if (docSnap.exists()) {
-        onUserCreated({ id: uid, ...docSnap.data() } as User);
-      } else {
-        const newUser: Omit<User, 'id'> = {
-          displayName: cleanName,
-          email: safeEmail,
-          totalPoints: 0,
-          createdAt: Date.now()
-        };
-        await setDoc(doc(db, 'users', uid), newUser);
-        onUserCreated({ id: uid, ...newUser });
-      }
-    } catch(err: any) {
-      setErrorMsg("حدث خطأ أثناء الدخول: " + err.message);
+      const userRef = doc(db, 'users', currentAuthUser.uid);
+      const newUser: Omit<User, 'id'> = {
+        displayName: cleanName,
+        email: currentAuthUser.email || '',
+        totalPoints: 0,
+        createdAt: Date.now()
+      };
+      await setDoc(userRef, newUser);
+      onUserCreated({ id: currentAuthUser.uid, ...newUser });
+    } catch (err: any) {
+      setErrorMsg("حدث خطأ أثناء حفظ الاسم: " + err.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
+  };
+
+  const cancelAndSignOut = async () => {
+    setErrorMsg('');
+    setLoading(true);
+    try {
+      await signOut(auth);
+      setChosenName('');
+    } catch (err: any) {
+      setErrorMsg("حدث خطأ أثناء تسجيل الخروج: " + err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -339,8 +368,6 @@ function LoginScreen({ onUserCreated }: { onUserCreated: (u: User) => void }) {
         <div className="w-16 h-16 bg-slate-900 text-white flex items-center justify-center rounded-2xl shadow-lg mb-6">
           <span className="font-black text-3xl">FF</span>
         </div>
-        <h1 className="text-2xl font-black text-slate-800 tracking-tight mb-2">تسجيل الدخول</h1>
-        <p className="text-slate-500 text-sm font-medium mb-8 text-center">أدخل اسمك لتبدأ المتعة والمنافسة</p>
         
         {errorMsg && (
           <div className="w-full bg-red-50 text-red-600 text-xs font-bold p-3 rounded-xl border border-red-100 mb-6 text-center">
@@ -348,25 +375,70 @@ function LoginScreen({ onUserCreated }: { onUserCreated: (u: User) => void }) {
           </div>
         )}
 
-        <form onSubmit={loginWithUsername} className="w-full space-y-6">
-          <div>
-             <input 
-              type="text" 
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="الاسم" 
-              className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-base font-bold text-center focus:border-slate-400 focus:bg-white outline-none transition-all placeholder:text-slate-400 placeholder:font-normal"
-              required
-            />
-          </div>
-          <button 
-            disabled={loading}
-            type="submit" 
-            className="w-full py-4 bg-slate-900 text-white text-base font-black rounded-2xl shadow-md hover:bg-slate-800 disabled:opacity-50 transition-all hover:-translate-y-1"
-          >
-            {loading ? 'جاري الدخول...' : 'دخول'}
-          </button>
-        </form>
+        {currentAuthUser ? (
+          // STEP 2: Pick Custom Username
+          <form onSubmit={completeRegistration} className="w-full text-center space-y-6">
+            <h1 className="text-2xl font-black text-slate-800 tracking-tight">اختر اسم المشارك</h1>
+            <p className="text-slate-500 text-sm font-medium">اكتب الاسم الذي تود استخدامه للظهور في الترتيب العام</p>
+            
+            <div>
+              <input 
+                type="text" 
+                value={chosenName}
+                onChange={e => setChosenName(e.target.value)}
+                placeholder="اسم المشارك (مثال: أحمد محمد)" 
+                className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-base font-bold text-center focus:border-slate-400 focus:bg-white outline-none transition-all placeholder:text-slate-400 placeholder:font-normal text-slate-800"
+                maxLength={25}
+                required
+              />
+            </div>
+
+            <div className="space-y-3">
+              <button 
+                disabled={loading}
+                type="submit" 
+                className="w-full py-4 bg-slate-900 text-white text-base font-black rounded-2xl shadow-md hover:bg-slate-800 disabled:opacity-50 transition-all hover:-translate-y-0.5 cursor-pointer"
+              >
+                {loading ? 'جاري الحفظ...' : 'دخول للتوقعات'}
+              </button>
+              
+              <button 
+                onClick={cancelAndSignOut}
+                disabled={loading}
+                type="button" 
+                className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-bold rounded-xl transition-all cursor-pointer"
+              >
+                إلغاء / تسجيل خروج
+              </button>
+            </div>
+          </form>
+        ) : (
+          // STEP 1: Sign In With Google
+          <>
+            <h1 className="text-2xl font-black text-slate-800 tracking-tight mb-2">تسجيل الدخول</h1>
+            <p className="text-slate-500 text-sm font-medium mb-8 text-center">انضم للتوقعات والمنافسة العائلية الشيقة</p>
+            
+            <button 
+              onClick={signInWithGoogle}
+              disabled={loading}
+              className="w-full py-4 px-6 bg-white border border-slate-200 text-slate-700 text-sm sm:text-base font-black rounded-2xl shadow-sm hover:bg-slate-50 disabled:opacity-50 transition-all hover:-translate-y-1 flex items-center justify-center gap-3 cursor-pointer"
+            >
+              {loading ? (
+                <span>جاري الدخول...</span>
+              ) : (
+                <>
+                  <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
+                    <path
+                      fill="#EA4335"
+                      d="M12.24 10.285V14.4h6.887c-.648 2.41-2.519 4.113-5.136 4.113-3.048 0-5.524-2.486-5.524-5.556s2.476-5.555 5.524-5.555c1.4 0 2.656.52 3.634 1.365l3.228-3.23C18.88 3.75 15.81 2.5 12.24 2.5 6.42 2.5 1.7 7.228 1.7 13.056s4.72 10.556 10.54 10.556c5.8 0 10.334-4.108 10.024-10.556H12.24z"
+                    />
+                  </svg>
+                  <span>تسجيل الدخول بـ Google</span>
+                </>
+              )}
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

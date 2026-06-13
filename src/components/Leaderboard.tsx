@@ -3,7 +3,7 @@ import { collection, query, orderBy, onSnapshot, limit } from 'firebase/firestor
 import { db } from '../lib/firebase';
 import { User } from '../types';
 import { notify } from '../lib/notifications';
-import { isAbdelwahabAhmed } from '../lib/admin';
+import { isAdmin } from '../lib/admin';
 
 export default function Leaderboard() {
   const [users, setUsers] = useState<User[]>([]);
@@ -13,10 +13,7 @@ export default function Leaderboard() {
     const q = query(collection(db, 'users'), orderBy('totalPoints', 'desc'), limit(100));
     const unsub = onSnapshot(q, (snapshot) => {
       const allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
-      const filtered = allUsers.filter(u => {
-        const email = (u.email || '').toLowerCase().trim();
-        return email !== 'mrahmedapp4@gmail.com' && email !== 'admin@user.familyfantasy.com';
-      });
+      const filtered = allUsers.filter(u => !isAdmin(u.email, u.displayName));
       setUsers(filtered);
       if (initialLoad.current) {
         initialLoad.current = false;
@@ -35,7 +32,6 @@ export default function Leaderboard() {
         </div>
         <div className="p-4 space-y-2">
           {users.map((user, idx) => {
-            const isHost = isAbdelwahabAhmed(user.displayName, user.email);
             return (
               <div key={user.id} className={`flex items-center p-4 rounded-xl transition-all ${idx === 0 ? 'bg-slate-900 text-white shadow-md transform hover:-translate-y-0.5' : 'bg-slate-50 border border-slate-100 hover:bg-slate-100'}`}>
                 <span className={`w-10 text-xs font-black ${idx === 0 ? 'text-amber-400' : 'text-slate-400'}`}>
@@ -43,16 +39,6 @@ export default function Leaderboard() {
                 </span>
                 <span className="flex-1 text-base font-bold flex items-center gap-2">
                   <span>{user.displayName}</span>
-                  {isHost && (
-                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-[10px] font-black border tracking-wider transition-all shadow-sm ${
-                      idx === 0 
-                        ? 'bg-amber-400/20 text-amber-300 border-amber-400/30 font-bold' 
-                        : 'bg-amber-100 text-amber-800 border-amber-200 font-bold'
-                    }`}>
-                      <span>👑</span>
-                      <span>الـ Host</span>
-                    </span>
-                  )}
                 </span>
                 <span className={`text-xl font-black ${idx === 0 ? 'text-white' : 'text-slate-800'}`}>{user.totalPoints}</span>
               </div>
